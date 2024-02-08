@@ -1252,14 +1252,26 @@ typedef struct {
     // Shaders
     void (*LoadShader)(const char *shaderName, bool32 linear);
 
+#if RETRO_REV0U
+    // StateMachine
+    void (*StateMachineRun)(void (*state)(Entity *), Entity *entity);
+
+    void (*RegisterStateHook)(void (*state)(Entity *), bool32 (*hook)(bool32 skippedState, Entity *entity), bool32 priority);
+    // runs all high priority state hooks hooked to the address of 'state', returns if the main state should be skipped or not
+    bool32 (*HandleRunState_HighPriority)(void *state, Entity *entity);
+    // runs all low priority state hooks hooked to the address of 'state'
+    void (*HandleRunState_LowPriority)(void *state, Entity *entity, bool32 skipState);
+#else
     // StateMachine
     void (*StateMachineRun)(void (*state)(void));
+
     void (*RegisterStateHook)(void (*state)(void), bool32 (*hook)(bool32 skippedState), bool32 priority);
     // runs all high priority state hooks hooked to the address of 'state', returns if the main state should be skipped or not
     bool32 (*HandleRunState_HighPriority)(void *state);
     // runs all low priority state hooks hooked to the address of 'state'
     void (*HandleRunState_LowPriority)(void *state, bool32 skipState);
 
+#endif
 #if RETRO_MOD_LOADER_VER >= 2
     // Mod Settings (Part 2)
     bool32 (*ForeachSetting)(const char *id, String *setting);
@@ -1542,9 +1554,11 @@ typedef struct {
     void (*SetPaletteEntry)(uint8 bankID, uint8 index, uint32 color);
     color (*GetPaletteEntry)(uint8 bankID, uint8 index);
     void (*SetActivePalette)(uint8 newActiveBank, int32 startLine, int32 endLine);
-    void (*CopyPalette)(uint8 sourceBank, uint8 srcBankStart, uint8 destinationBank, uint8 destBankStart, uint16 count);
-#if RETRO_REV02
+#if RETRO_REV0U
+    void (*CopyPalette)(uint8 sourceBank, uint8 srcBankStart, uint8 destinationBank, uint8 destBankStart, uint8 count);
     void (*LoadPalette)(uint8 bankID, const char *path, uint16 disabledRows);
+#elif RETRO_REV02
+    void (*CopyPalette)(uint8 sourceBank, uint8 srcBankStart, uint8 destinationBank, uint8 destBankStart, uint16 count);
 #endif
     void (*RotatePalette)(uint8 bankID, uint8 startIndex, uint8 endIndex, bool32 right);
     void (*SetLimitedFade)(uint8 destBankID, uint8 srcBankA, uint8 srcBankB, int16 blendAmount, int32 startIndex, int32 endIndex);
@@ -1588,7 +1602,7 @@ typedef struct {
     // Sprite Animations & Frames
     uint16 (*LoadSpriteAnimation)(const char *filePath, uint8 scope);
     uint16 (*CreateSpriteAnimation)(const char *filePath, uint32 frameCount, uint32 listCount, uint8 scope);
-#if RETRO_MOD_LOADER_VER >= 2
+#if RETRO_REV0U || RETRO_MOD_LOADER_VER >= 2
     void (*SetSpriteAnimation)(uint16 aniFrames, uint16 listID, Animator *animator, bool32 forceApply, int32 frameID);
 #else
     void (*SetSpriteAnimation)(uint16 aniFrames, uint16 listID, Animator *animator, bool32 forceApply, int16 frameID);
@@ -1650,9 +1664,6 @@ typedef struct {
     uint16 (*GetSfx)(const char *path);
     int32 (*PlaySfx)(uint16 sfx, int32 loopPoint, int32 priority);
     void (*StopSfx)(uint16 sfx);
-#if RETRO_REV0U
-    void (*StopAllSfx)(void);
-#endif
     int32 (*PlayStream)(const char *filename, uint32 channel, uint32 startPos, uint32 loopPoint, bool32 loadASync);
     void (*SetChannelAttributes)(uint8 channel, float volume, float pan, float speed);
     void (*StopChannel)(uint32 channel);
@@ -1721,6 +1732,7 @@ typedef struct {
     // Origins Extras
     void (*NotifyCallback)(int32 callbackID, int32 param1, int32 param2, int32 param3);
     void (*SetGameFinished)(void);
+    void (*StopAllSfx)(void);
 #endif
 } RSDKFunctionTable;
 
@@ -1728,6 +1740,21 @@ typedef struct {
 // HELPERS
 // -------------------------
 
+#if RETRO_REV0U
+// used for casts and etc
+#define Type_StateMachine void (*)(Entity *)
+// used for variable decl
+#define StateMachine(name) void (*name)(Entity *)
+#if RETRO_USE_MOD_LOADER
+#define StateMachine_Run2(state, entity) Mod.StateMachineRun(state, entity)
+#define StateMachine_Run(state) Mod.StateMachineRun(state, NULL)
+#else
+#define StateMachine_Run(state, entity)                                                                                                              \
+    if (state) {                                                                                                                                     \
+        state(entity);                                                                                                                               \
+    }
+#endif
+#else
 // used for casts and etc
 #define Type_StateMachine void (*)(void)
 // used for variable decl
@@ -1739,6 +1766,7 @@ typedef struct {
     if (state) {                                                                                                                                     \
         state();                                                                                                                                     \
     }
+#endif
 #endif
 #define StateMachine_None NULL
 
